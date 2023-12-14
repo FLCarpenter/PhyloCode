@@ -1,9 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Wed Dec 13 20:45:18 2023
 
-@author: Fiona
-"""
 
 from sys import argv
 
