@@ -18,7 +18,7 @@ e.g.
 
 **Remove_Codon3.R** is designed to allow for the removal of the 3rd codon since RAxML and other software don't support its removal through partitioning. The aligned input nucleotide supermatrix should in .fasta format and in the correct reading frame.
 ###### Usage
-    Rscript Remove_Codon3.R --help|-h --input-f input.fasta --output|-o output.fasta
+    Rscript Remove_Codon3.R --help|-h --input|-f input.fasta --output|-o output.fasta
 
 
 
