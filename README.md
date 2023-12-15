@@ -9,7 +9,6 @@ All scripts are designed for Command Line usage.
 ###### Usage
     python RY_Recoder.py input.fasta datatype position
 ###### 
-    e.g. 
     python RY_Recoder.py input.fasta nt N
     python RY_Recoder.py input.fasta nt3r 1
 (codons 1/2/3 or N (all))
@@ -28,7 +27,6 @@ All scripts are designed for Command Line usage.
 ###### Usage
     python Repartitioner.py -f partition_type input.txt output.txt
 ###### 
-    e.g. 
     python Repartitioner.py -f gc input.txt output.txt
     python Repartitioner.py -f dc input.txt output.txt
     python Repartitioner.py -f c input.txt output.txt
