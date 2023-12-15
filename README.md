@@ -8,7 +8,8 @@ All scripts are designed for Command Line usage.
 **RY_Recoder.py** Recodes nucleotide sequences from an input .fasta file replacing purines ("A", "a", "G", "g") with "R" and pyrimidines ("T", "t", "C", "c") with 'Y'. RY recoding aims to mitigate against the effect of base composition biases/heterogeneity in phylogenetic inference. 
 ###### Usage
     python RY_Recoder.py input.fasta datatype position
-e.g. 
+###### 
+    e.g. 
     python RY_Recoder.py input.fasta nt N
     python RY_Recoder.py input.fasta nt3r 1
 (codons 1/2/3 or N (all))
@@ -26,7 +27,8 @@ e.g.
 **Repartitioner.py** is designed to expand on partitioner.py (see link above), it is designed specifically to be used with nexus formatted partitions produced by partitioner.py for nucleotide supermatrices. It takes an input partition and repartitions to match a .fasta with the 3rd codon position prior removed.
 ###### Usage
     python Repartitioner.py -f partition_type input.txt output.txt
-e.g. 
+###### 
+    e.g. 
     python Repartitioner.py -f gc input.txt output.txt
     python Repartitioner.py -f dc input.txt output.txt
     python Repartitioner.py -f c input.txt output.txt
