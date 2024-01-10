@@ -31,3 +31,9 @@ All scripts are designed for Command Line usage.
     python Repartitioner.py -f dc input.txt output.txt
     python Repartitioner.py -f c input.txt output.txt
 (gc - g+codon12, dc - direction+codon12, c - codon12)
+
+
+**raxml_partitioner.py** takes a nexus partition file and reformats it into a raxml compatible partition
+###### Usage
+    python raxml_partitioner.py input.nex output.txt
+
