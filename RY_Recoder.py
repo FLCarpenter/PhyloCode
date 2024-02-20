@@ -21,12 +21,12 @@ def Is_Valid_Sequence(sequence):
 def RY_Recoding_N(Sequence):
     recoded_seq = ""
     for base in Sequence:
-        if base in 'AGag':
+        if base in 'AGagRr':
             recoded_seq += 'R'
-        elif base in 'TCtc':
+        elif base in 'TCtcYy':
             recoded_seq += 'Y'
         else:
-            recoded_seq += base
+            recoded_seq += '-'
     return recoded_seq
 
 def RY_Recoding_Codon_NT(Sequence, Position):
@@ -35,12 +35,12 @@ def RY_Recoding_Codon_NT(Sequence, Position):
     recoded_seq = ''
     for base in Sequence:
         if (Index + 3) % 3 == 0:
-            if base in 'AGag':
+            if base in 'AGagRr':
                 recoded_seq += 'R'
-            elif base in 'TCtc':
+            elif base in 'TCtcYy':
                 recoded_seq += 'Y'
             else:
-                recoded_seq += base
+                recoded_seq += '-'
         else:
             recoded_seq += base
         Index += 1
@@ -52,12 +52,12 @@ def RY_Recoding_Codon_NT3R(Sequence, Position):
     recoded_seq = ''
     for base in Sequence:
         if (Index + 2) % 2 == 0:
-            if base in 'AGag':
+            if base in 'AGagRr':
                 recoded_seq += 'R'
-            elif base in 'TCtc':
+            elif base in 'TCtcYy':
                 recoded_seq += 'Y'
             else:
-                recoded_seq += base
+                recoded_seq += '-'
         else:
             recoded_seq += base
         Index += 1
