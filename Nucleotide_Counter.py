@@ -1,6 +1,3 @@
-# -*- coding: utf-8 -*-
-
-
 def count_nucleotides(sequence):
     counts = {'A': 0, 'T': 0, 'G': 0, 'C': 0}
     for base in sequence:
@@ -21,8 +18,18 @@ def read_fasta(file_path):
                 sequences[current_sequence] += line
     return sequences
 
+def print_usage():
+    print("Usage: python script.py <fasta_file>")
+    print("This script counts nucleotides 'ATGC' for each sequence in the provided FASTA file.")
+
 def main():
-    fasta_file = "sequences.fasta"  # Change this to your FASTA file path
+    import sys
+    
+    if len(sys.argv) != 2:
+        print_usage()
+        return
+    
+    fasta_file = sys.argv[1]
     sequences = read_fasta(fasta_file)
     
     for seq_name, seq in sequences.items():
