@@ -13,7 +13,9 @@ All scripts are designed for Command Line usage.
     python RY_Recoder.py input.fasta nt3r 1
 (codons 1/2/3 or N (all))
 
-
+**Nucleotide_Counter.py** Counts each instance of a nucleotide from an input .fasta file giving an output with a count for A,T,G,C separately.
+###### Usage
+    python Nucleotide_Counter.py input.fasta
 
 
 **Remove_Codon3.R** is designed to allow for the removal of the 3rd codon since RAxML and other software don't support its removal through partitioning. The aligned input nucleotide supermatrix should in .fasta format and in the correct reading frame.
