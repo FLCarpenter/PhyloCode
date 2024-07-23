@@ -13,9 +13,7 @@ All scripts are designed for Command Line usage.
     python RY_Recoder.py input.fasta nt3r 1
 Note:
 
-
 datatype: nt (nucleotide) or nt3r (nucleotide with 3rd codon position removed)
-
 
 position: codons 1/2/3 or N (all)
 
