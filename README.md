@@ -5,17 +5,19 @@ All scripts are designed for Command Line usage.
 
 
 
-**RY_Recoder.py** Recodes nucleotide sequences from an input .fasta file replacing purines ("A", "a", "G", "g") with "R" and pyrimidines ("T", "t", "C", "c") with 'Y'. RY recoding aims to mitigate against the effect of base composition biases/heterogeneity in phylogenetic inference. 
+**RY_Recoder.py** DEPRECIATED - see below for updated recoder
+
+**RY_Recoder_Binary.py** Recodes nucleotide sequences from an input .fasta file replacing purines ("A", "a", "G", "g") with "0" or "R" and pyrimidines ("T", "t", "C", "c") with "1" or "Y". RY recoding aims to mitigate against the effect of base composition biases/heterogeneity in phylogenetic inference. 
 ###### Usage
-    python RY_Recoder.py input.fasta datatype position
+    python RY_Recoder_Binary.py input.fasta input_datatype position output_datatype
 ###### 
-    python RY_Recoder.py input.fasta nt N
-    python RY_Recoder.py input.fasta nt3r 1
+    python RY_Recoder_Binary.py input.fasta nt N Binary
+    python RY_Recoder_Binary.py input.fasta nt3r 1 RY
+
 Note:
-
 datatype: nt (nucleotide) or nt3r (nucleotide with 3rd codon position removed)
-
 position: codons 1/2/3 or N (all)
+
 
 **Nucleotide_Counter.py** Counts each instance of a nucleotide from an input .fasta file giving an output with a count for A,T,G,C separately.
 ###### Usage
