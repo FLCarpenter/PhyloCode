@@ -17,8 +17,11 @@ All scripts are designed for Command Line usage.
     python Alignment_Counter.py input.fasta -a
     python Alignment_Counter.py input.fasta -a -g
 Per-sequence nucleotide counts:    *NO OPTIONAL ARGUMENTS*
+
 Per-sequence gap percentage:      -g
+
 Alignment-wide nucleotide counts: -a
+
 Alignment-wide gap percentage:    -a -g
 
 
