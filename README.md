@@ -16,7 +16,10 @@ All scripts are designed for Command Line usage.
     python Alignment_Counter.py input.fasta -g
     python Alignment_Counter.py input.fasta -a
     python Alignment_Counter.py input.fasta -a -g
-
+Per-sequence nucleotide counts:    *NO OPTIONAL ARGUMENTS*
+Per-sequence gap percentage:      -g
+Alignment-wide nucleotide counts: -a
+Alignment-wide gap percentage:    -a -g
 
 
 **RY_Recoder_Binary.py** Recodes nucleotide sequences from an input .fasta file replacing purines ("A", "a", "G", "g") with "0" or "R" and pyrimidines ("T", "t", "C", "c") with "1" or "Y". RY recoding aims to mitigate against the effect of base composition biases/heterogeneity in phylogenetic inference. 
