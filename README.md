@@ -71,8 +71,13 @@ input.txt: A partition file defining gene regions and their alignment coordinate
 input.fasta: A FASTA-formatted file containing the concatenated supermatrix alignment.
 
 Note: Partition File Format - each line should specify a gene and its corresponding column range in the supermatrix, using the format:
+
 path/to/gene_file.fasta = start-end
+
+
 Example:
+
 data/12S.fasta = 1-1699
+
 data/16S.fasta = 1700-3200
 
