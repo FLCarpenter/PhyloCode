@@ -35,6 +35,7 @@ Alignment-wide gap percentage:    -a -g
 
 Note:
 datatype: nt (nucleotide) or nt3r (nucleotide with 3rd codon position removed)
+
 position: codons 1/2/3 or N (all)
 
 
@@ -68,7 +69,9 @@ position: codons 1/2/3 or N (all)
     python split_supermatrix.py input.txt input.fasta
 
 input.txt: A partition file defining gene regions and their alignment coordinates.
+
 input.fasta: A FASTA-formatted file containing the concatenated supermatrix alignment.
+
 
 Note: Partition File Format - each line should specify a gene and its corresponding column range in the supermatrix, using the format:
 
