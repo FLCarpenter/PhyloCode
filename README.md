@@ -53,10 +53,26 @@ position: codons 1/2/3 or N (all)
     python Repartitioner.py -f dc input.txt output.txt
     python Repartitioner.py -f c input.txt output.txt
 (gc - g+codon12, dc - direction+codon12, c - codon12)
+ 
 
 
 
 **raxml_partitioner.py** takes a nexus partition file and reformats it into a raxml compatible partition
 ###### Usage
     python raxml_partitioner.py input.nex output.txt
+
+
+
+**split_supermatrix.py** splits a concatenated nucleotide alignment (supermatrix) into separate gene-specific FASTA files based on a user-provided partition file.
+###### Usage
+    python split_supermatrix.py input.txt input.fasta
+
+input.txt: A partition file defining gene regions and their alignment coordinates.
+input.fasta: A FASTA-formatted file containing the concatenated supermatrix alignment.
+
+Note: Partition File Format - each line should specify a gene and its corresponding column range in the supermatrix, using the format:
+path/to/gene_file.fasta = start-end
+Example:
+data/12S.fasta = 1-1699
+data/16S.fasta = 1700-3200
 
