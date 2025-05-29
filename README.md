@@ -26,6 +26,9 @@ Alignment-wide nucleotide counts: -a
 Alignment-wide gap percentage:    -a -g
 
 
+**Gene_Presence.py** Returns TRUE/FALSE depending on whether a gene is present for each sequence in a supermatrix based on an alignment and partition file
+###### Usage
+
 **RY_Recoder_Binary.py** Recodes nucleotide sequences from an input .fasta file replacing purines ("A", "a", "G", "g") with "0" or "R" and pyrimidines ("T", "t", "C", "c") with "1" or "Y". RY recoding aims to mitigate against the effect of base composition biases/heterogeneity in phylogenetic inference. 
 ###### Usage
     python RY_Recoder_Binary.py input.fasta input_datatype position output_datatype
