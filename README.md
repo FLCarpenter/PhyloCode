@@ -43,6 +43,29 @@ position: codons 1/2/3 or N (all)
 
 
 
+**PhyMetrics.R** analyses phylogenetic trees with associated metadata and computes metrics like the taxonomic retention index (tRI), taxonomic consistency index (tCI), identifies clusters, detects intruder tips, and calculates the taxonomic Simpson diversity index (tSDI).
+###### Usage
+    Rscript phyloClusterEval.R --tree path/to/treefile.nwk --metadata path/to/metadata.csv --ranks rank1,rank2,... --outgroups id1,id2,... [--threads N] [--root tip1,tip2,...] [--help]
+
+
+Required arguments:
+--tree (-t): Path to the Newick tree file
+
+--metadata (-m): Path to the metadata CSV file with taxonomic assignments: 1 column per rank
+
+--ranks (-k): Comma-separated list of ranks to analyze (e.g. genus,species)
+
+--outgroups (-o): Comma-separated list of tip IDs to define outgroups
+
+Optional arguments:
+--threads (-n): Number of parallel threads to use (default: number of cores - 1)
+
+--root (-r): Comma-separated tip names to use for rooting the tree (default: outgroups)
+
+--help (-h): Show help message
+    
+
+
 **Remove_Codon3.R** is designed to allow for the removal of the 3rd codon since RAxML and other software don't support its removal through partitioning. The aligned input nucleotide supermatrix should in .fasta format and in the correct reading frame.
 ###### Usage
     Rscript Remove_Codon3.R --help|-h --input|-f input.fasta --output|-o output.fasta
