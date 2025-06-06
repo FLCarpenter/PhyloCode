@@ -29,18 +29,6 @@ Alignment-wide gap percentage:    -a -g
 **Gene_Presence.py** Returns TRUE/FALSE depending on whether a gene is present for each sequence in a supermatrix based on an alignment and partition file
 ###### Usage
 
-**RY_Recoder_Binary.py** Recodes nucleotide sequences from an input .fasta file replacing purines ("A", "a", "G", "g") with "0" or "R" and pyrimidines ("T", "t", "C", "c") with "1" or "Y". RY recoding aims to mitigate against the effect of base composition biases/heterogeneity in phylogenetic inference. 
-###### Usage
-    python RY_Recoder_Binary.py input.fasta input_datatype position output_datatype
-###### 
-    python RY_Recoder_Binary.py input.fasta nt N Binary
-    python RY_Recoder_Binary.py input.fasta nt3r 1 RY
-
-Note:
-datatype: nt (nucleotide) or nt3r (nucleotide with 3rd codon position removed)
-
-position: codons 1/2/3 or N (all)
-
 
 
 **PhyMetrics.R** analyses phylogenetic trees with associated metadata and computes metrics like the taxonomic retention index (tRI), taxonomic consistency index (tCI), identifies clusters, detects intruder tips, and calculates the taxonomic Simpson diversity index (tSDI).
@@ -64,6 +52,20 @@ Optional arguments:
 
 --help (-h): Show help message
     
+
+
+**RY_Recoder_Binary.py** Recodes nucleotide sequences from an input .fasta file replacing purines ("A", "a", "G", "g") with "0" or "R" and pyrimidines ("T", "t", "C", "c") with "1" or "Y". RY recoding aims to mitigate against the effect of base composition biases/heterogeneity in phylogenetic inference. 
+###### Usage
+    python RY_Recoder_Binary.py input.fasta input_datatype position output_datatype
+###### 
+    python RY_Recoder_Binary.py input.fasta nt N Binary
+    python RY_Recoder_Binary.py input.fasta nt3r 1 RY
+
+Note:
+datatype: nt (nucleotide) or nt3r (nucleotide with 3rd codon position removed)
+
+position: codons 1/2/3 or N (all)
+
 
 
 **Remove_Codon3.R** is designed to allow for the removal of the 3rd codon since RAxML and other software don't support its removal through partitioning. The aligned input nucleotide supermatrix should in .fasta format and in the correct reading frame.
