@@ -33,7 +33,7 @@ Alignment-wide gap percentage:    -a -g
 
 **PhyMetrics.R** analyses phylogenetic trees with associated metadata and computes metrics like the taxonomic retention index (tRI), taxonomic consistency index (tCI), identifies clusters, detects intruder tips, and calculates the taxonomic Simpson diversity index (tSDI).
 ###### Usage
-    Rscript phyloClusterEval.R --tree path/to/treefile.nwk --metadata path/to/metadata.csv --ranks rank1,rank2,... --outgroups id1,id2,... [--threads N] [--root tip1,tip2,...] [--help]
+    Rscript PhyMetrics.R --tree path/to/treefile.nwk --metadata path/to/metadata.csv --ranks rank1,rank2,... --outgroups id1,id2,... [--nthreads N] [--root tip1,tip2,...] [--help]
 
 
 Required arguments:
@@ -46,7 +46,7 @@ Required arguments:
 --outgroups (-o): Comma-separated list of tip IDs to define outgroups
 
 Optional arguments:
---threads (-n): Number of parallel threads to use (default: number of cores - 1)
+--nthreads (-n): Number of parallel threads to use (default: number of cores - 1)
 
 --root (-r): Comma-separated tip names to use for rooting the tree (default: outgroups)
 
