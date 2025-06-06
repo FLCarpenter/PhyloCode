@@ -41,6 +41,7 @@ Options:
   -o, --outgroups    Comma-separated list of tip IDs to define outgroups [required]
   -r, --root         Comma-separated tip names to use for rooting the tree (default: outgroups)
   -n, --threads      Number of parallel threads to use (default: number of available cores - 1)
+  -p, --pre          Prefix to use for output files (optional)
   -h, --help         Show this help message and exit
 
 Description:
