@@ -1,11 +1,6 @@
 PhyloCode contains scripts designed for the preparation, processing, and manipulation of phylogenetic data, and the visualisation of phylogenetic trees. 
-Most scripts are designed to be used in conjunction with https://github.com/tjcreedy/pipelines. 
+Some scripts are designed to be used in conjunction with https://github.com/tjcreedy/pipelines. 
 All scripts are designed for Command Line usage.
-
-
-**RY_Recoder.py** DEPRECIATED - see below for updated recoder
-
-**Nucleotide_Counter.py** DEPRECIATED - see below for updated counter
 
 
 
