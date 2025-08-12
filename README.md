@@ -53,7 +53,13 @@ Optional arguments:
 --pre (-p): Prefix to use for output filenames (default: No prefix (outputs written directly))
 
 --help (-h): Show help message
+
+
     
+**replace_non_iupac.py** Replaces all non-IUPAC nucleotide codes (including gaps/missing) with 'N'
+###### Usage 
+    python3 replace_non_iupac.py input.fasta output.fasta
+
 
 
 **RY_Recoder_Binary.py** Recodes nucleotide sequences from an input .fasta file replacing purines ("A", "a", "G", "g") with "0" or "R" and pyrimidines ("T", "t", "C", "c") with "1" or "Y". RY recoding aims to mitigate against the effect of base composition biases/heterogeneity in phylogenetic inference. 
