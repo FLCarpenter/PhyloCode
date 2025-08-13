@@ -456,30 +456,36 @@ intruder_results_list <- foreach(rank = names(cluster_results), .packages = c("a
 
 intruder_results <- bind_rows(intruder_results_list)
 
+                             
+#####Identify All Potential MisID ----------------------------------------------
 
-#####Identify All Potential MisID-----------------------------------------------
-# Identify tips potentially misidentified, excluding outgroup groups
-intruder_tip_groups <- intruder_results %>%
-  select(rank, intruder_cluster_tips, intruder_group)
-
-# Remove intruders belonging to outgroup groups
-for (rank in names(outgroup_groups_by_rank)) {
-  outgroup_groups <- outgroup_groups_by_rank[[rank]]
-  intruder_tip_groups <- intruder_tip_groups %>%
-    filter(!(rank == rank & intruder_group %in% outgroup_groups))
+if (nrow(intruder_results) > 0) {
+  # Identify tips potentially misidentified, excluding outgroup groups
+  intruder_tip_groups <- intruder_results %>%
+    select(rank, intruder_cluster_tips, intruder_group)
+  
+  # Remove intruders belonging to outgroup groups
+  for (rank in names(outgroup_groups_by_rank)) {
+    outgroup_groups <- outgroup_groups_by_rank[[rank]]
+    intruder_tip_groups <- intruder_tip_groups %>%
+      filter(!(rank == rank & intruder_group %in% outgroup_groups))
+  }
+  
+  # Unnest tips and format for output
+  possible_misidentified_tips <- intruder_tip_groups %>%
+    mutate(tips = strsplit(intruder_cluster_tips, ",")) %>%
+    unnest(tips) %>%
+    select(tips, rank, intruder_group) %>%
+    distinct() %>%
+    pivot_wider(names_from = rank, values_from = intruder_group) %>%
+    mutate(tips = factor(tips, levels = tree$tip.label)) %>%
+    arrange(tips)
+  
+  print("Step 5: Intruder detection complete")
+  
+} else {
+  print("Step 5: No intruders detected, skipping misidentification step")
 }
-
-# Unnest tips and format for output
-possible_misidentified_tips <- intruder_tip_groups %>%
-  mutate(tips = strsplit(intruder_cluster_tips, ",")) %>%
-  unnest(tips) %>%
-  select(tips, rank, intruder_group) %>%
-  distinct() %>%
-  pivot_wider(names_from = rank, values_from = intruder_group) %>%
-  mutate(tips = factor(tips, levels = tree$tip.label)) %>%
-  arrange(tips)
-
-print("Step 5: Intruder detection complete")
 
 #####Calculate tSDI-------------------------------------------------------------
 
