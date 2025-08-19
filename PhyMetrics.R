@@ -190,7 +190,7 @@ flag_nested_clusters <- function(tree, clusters) {
     focal <- clusters[[i]]
     if (length(focal) < 2) next
     mrca_node <- getMRCA(tree, focal)
-    descendant_tips <- Descendants(tree, mrca_node, type = "tips")[[1]]
+    descendant_tips <- phangorn::Descendants(tree, mrca_node, type = "tips")[[1]]
     descendant_labels <- tree$tip.label[descendant_tips]
     for (j in seq_along(clusters)) {
       if (i == j) next
@@ -412,7 +412,7 @@ intruder_results_list <- foreach(rank = names(cluster_results), .packages = c("a
       cluster_id_counter <- cluster_id_counter + 1
       
       focal_mrca <- getMRCA(tree, focal_cluster)
-      focal_descendants <- Descendants(tree, focal_mrca, "all")
+      focal_descendants <- phangorn::Descendants(tree, focal_mrca, "all")
       
       for (intruder_group in group_names) {
         if (intruder_group == focal_group) next
