@@ -82,6 +82,7 @@ metadata <- read.csv(metadata_file, stringsAsFactors = FALSE)
 colnames(metadata)[1] <- "mt_id"  # Force first column to be 'mt_id'
 metadata <- metadata %>% filter(mt_id %in% tree$tip.label)
 metadata[metadata == ""] <- NA
+metadata[] <- lapply(metadata, trimws)
 
 #####Functions------------------------------------------------------------------
 
@@ -169,6 +170,81 @@ find_transitions <- function(tree, states) {
   }
   list(transitions = transitions, node_states = node_states)
 }
+
+merge_contiguous_sisters <- function(tree, clusters) {
+  merged <- clusters
+  changed <- TRUE
+  
+  parent_of <- function(node) {
+    row <- which(tree$edge[,2] == node)
+    if(length(row) == 0) return(NA)
+    tree$edge[row, 1]
+  }
+  
+  while(changed) {
+    changed <- FALSE
+    n <- length(merged)
+    if(n <= 1) break
+    
+    to_remove <- integer(0)
+    
+    for(i in 1:(n-1)) {
+      for(j in (i+1):n) {
+        
+        # Representative node for cluster i
+        node_i <- if(length(merged[[i]]) == 1) {
+          tip_index <- which(tree$tip.label == merged[[i]])
+          parent_of(tip_index)   # parent of tip
+        } else {
+          getMRCA(tree, merged[[i]])
+        }
+        
+        # Representative node for cluster j
+        node_j <- if(length(merged[[j]]) == 1) {
+          tip_index <- which(tree$tip.label == merged[[j]])
+          parent_of(tip_index)
+        } else {
+          getMRCA(tree, merged[[j]])
+        }
+        
+        if(is.na(node_i) || is.na(node_j)) next
+        
+        # Parents and grandparents
+        parent_i <- parent_of(node_i)
+        parent_j <- parent_of(node_j)
+        parent_2i <- if(!is.na(parent_i)) parent_of(parent_i) else NA
+        parent_2j <- if(!is.na(parent_j)) parent_of(parent_j) else NA
+        
+        # --- Merge conditions ---
+        
+        # (1) Sisters: same parent
+        is_sister <- !is.na(parent_i) && !is.na(parent_j) && parent_i == parent_j
+        
+        # (2) Directly connected: one MRCA is parent of the other
+        is_directly_connected <- parent_i == node_j || parent_j == node_i
+        
+        # (3) Paraphyletic: one cluster’s grandparent equals the other's parent
+        is_paraphyletic_cluster <- (!is.na(parent_2i) && !is.na(parent_j) && parent_2i == parent_j) ||
+          (!is.na(parent_2j) && !is.na(parent_i) && parent_2j == parent_i)
+        
+        # (4) Paraphyletic: one cluster’s grandparent equals the other's node (tip parent)
+        is_paraphyletic_tip <- (!is.na(parent_2i) && parent_2i == node_j) ||
+          (!is.na(parent_2j) && parent_2j == node_i)
+        
+        if(is_sister || is_directly_connected || is_paraphyletic_cluster || is_paraphyletic_tip) {
+          merged[[i]] <- unique(c(merged[[i]], merged[[j]]))
+          to_remove <- c(to_remove, j)
+          changed <- TRUE
+        }
+      }
+    }
+    
+    if(length(to_remove) > 0) merged <- merged[-unique(to_remove)]
+  }
+  
+  return(merged)
+}
+
 
 flag_nested_clusters <- function(tree, clusters) {
   if (length(clusters) == 0) {
@@ -327,6 +403,10 @@ cluster_results <- foreach(rank = names(presence_absence_matrix), .packages = c(
     filtered_list <- Filter(function(x) length(x) > 0, filtered_list)
     unique_clusters <- filtered_list[!duplicated(lapply(filtered_list, function(x) paste(sort(x), collapse = "_")))]
     
+    if(length(unique_clusters) > 1) {
+      unique_clusters <- merge_contiguous_sisters(tree, unique_clusters)
+    }
+    
     nested_flags <- flag_nested_clusters(pruned_tree, unique_clusters)
     
     # Merge nested clusters with their parents
@@ -388,105 +468,6 @@ cluster_df <- bind_rows(cluster_df)
 
 print("Step 4: Clusters identified")
 
-#####Intruder Detection---------------------------------------------------------
-
-intruder_results_list <- foreach(rank = names(cluster_results), .packages = c("ape", "dplyr")) %dopar% {
-  group_data <- cluster_results[[rank]]
-  if (is.null(group_data)) return(NULL)
-  
-  group_names <- names(group_data)
-  intruder_results_rank <- list()
-  
-  for (focal_group in group_names) {
-    focal_info <- group_data[[focal_group]]
-    focal_clusters <- focal_info$clusters
-    
-    # Filter out singleton clusters
-    focal_clusters <- Filter(function(cl) length(cl) > 1, focal_clusters)
-    if (length(focal_clusters) == 0) next
-    
-    cluster_id_counter <- 1
-    
-    for (focal_cluster in focal_clusters) {
-      focal_cluster_id <- cluster_id_counter
-      cluster_id_counter <- cluster_id_counter + 1
-      
-      focal_mrca <- getMRCA(tree, focal_cluster)
-      focal_descendants <- phangorn::Descendants(tree, focal_mrca, "all")
-      
-      for (intruder_group in group_names) {
-        if (intruder_group == focal_group) next
-        
-        intruder_info <- group_data[[intruder_group]]
-        intruder_clusters <- intruder_info$clusters
-        if (length(intruder_clusters) == 0) next
-        
-        for (k in seq_along(intruder_clusters)) {
-          intruder_cluster <- intruder_clusters[[k]]
-          
-          if (length(intruder_cluster) == 1) {
-            intruder_node <- which(tree$tip.label == intruder_cluster[1])
-          } else {
-            intruder_node <- getMRCA(tree, intruder_cluster)
-          }
-          
-          if (intruder_node %in% focal_descendants) {
-            intruder_results_rank[[length(intruder_results_rank) + 1]] <- tibble(
-              rank = rank,
-              focal_group = focal_group,
-              focal_cluster_id = focal_cluster_id,
-              focal_cluster_tips = paste(focal_cluster, collapse = ","),
-              intruder_group = intruder_group,
-              intruder_cluster_id = k,
-              intruder_node = intruder_node,
-              intruder_cluster_tips = paste(intruder_cluster, collapse = ",")
-            )
-          }
-        }
-      }
-    }
-  }
-  
-  if (length(intruder_results_rank) > 0) {
-    bind_rows(intruder_results_rank)
-  } else {
-    tibble()
-  }
-}
-
-intruder_results <- bind_rows(intruder_results_list)
-
-                             
-#####Identify All Potential MisID ----------------------------------------------
-
-if (nrow(intruder_results) > 0) {
-  # Identify tips potentially misidentified, excluding outgroup groups
-  intruder_tip_groups <- intruder_results %>%
-    select(rank, intruder_cluster_tips, intruder_group)
-  
-  # Remove intruders belonging to outgroup groups
-  for (rank in names(outgroup_groups_by_rank)) {
-    outgroup_groups <- outgroup_groups_by_rank[[rank]]
-    intruder_tip_groups <- intruder_tip_groups %>%
-      filter(!(rank == rank & intruder_group %in% outgroup_groups))
-  }
-  
-  # Unnest tips and format for output
-  possible_misidentified_tips <- intruder_tip_groups %>%
-    mutate(tips = strsplit(intruder_cluster_tips, ",")) %>%
-    unnest(tips) %>%
-    select(tips, rank, intruder_group) %>%
-    distinct() %>%
-    pivot_wider(names_from = rank, values_from = intruder_group) %>%
-    mutate(tips = factor(tips, levels = tree$tip.label)) %>%
-    arrange(tips)
-  
-  print("Step 5: Intruder detection complete")
-  
-} else {
-  print("Step 5: No intruders detected, skipping misidentification step")
-}
-
 #####Calculate tSDI-------------------------------------------------------------
 
 tSDI_results <- foreach(rank = names(cluster_results), .combine = bind_rows) %dopar% {
@@ -526,7 +507,119 @@ ensemble_tSDI <- filtered_tSDI %>%
   group_by(rank) %>%
   summarise(mean_tSDI = mean(tSDI, na.rm = TRUE), .groups = "drop")
 
-print("Step 6: tSDI scores computed")
+print("Step 5: tSDI scores computed")
+
+#######TO CLEAN#################################################################
+
+#####Intruder /MisID Detection--------------------------------------------------
+intruder_results_list <- foreach(rank = names(cluster_results), .packages = c("ape", "dplyr", "phangorn")) %dopar% {
+  group_data <- cluster_results[[rank]]
+  if (is.null(group_data)) return(NULL)
+  
+  group_names <- names(group_data)
+  tsdi_less_1 <- tSDI_results %>% filter(tSDI < 1) %>% pull(group)
+  
+  find_intruders <- function(focal_set, intruder_set) {
+    results <- list()
+    
+    for (focal_group in focal_set) {
+      focal_info <- group_data[[focal_group]]
+      if (is.null(focal_info)) next
+      focal_clusters <- Filter(function(cl) length(cl) > 1, focal_info$clusters)
+      if (length(focal_clusters) == 0) next
+      
+      for (cluster_id in seq_along(focal_clusters)) {
+        focal_cluster <- focal_clusters[[cluster_id]]
+        focal_mrca <- getMRCA(tree, focal_cluster)
+        focal_descendants <- phangorn::Descendants(tree, focal_mrca, "all")
+        
+        for (intruder_group in intruder_set) {
+          if (intruder_group == focal_group) next
+          intruder_info <- group_data[[intruder_group]]
+          if (is.null(intruder_info) || length(intruder_info$clusters) == 0) next
+          
+          for (k in seq_along(intruder_info$clusters)) {
+            intruder_cluster <- intruder_info$clusters[[k]]
+            intruder_node <- if (length(intruder_cluster) == 1) {
+              which(tree$tip.label == intruder_cluster[1])
+            } else {
+              getMRCA(tree, intruder_cluster)
+            }
+            
+            if (intruder_node %in% focal_descendants) {
+              results[[length(results) + 1]] <- tibble(
+                rank = rank,
+                focal_group = focal_group,
+                focal_cluster_id = cluster_id,
+                focal_cluster_tips = paste(focal_cluster, collapse = ","),
+                intruder_group = intruder_group,
+                intruder_cluster_id = k,
+                intruder_node = intruder_node,
+                intruder_cluster_tips = paste(intruder_cluster, collapse = ",")
+              )
+            }
+          }
+        }
+      }
+    }
+    
+    if (length(results) > 0) bind_rows(results) else tibble()
+  }
+  
+  # Compute both directions separately
+  intruders_both <- rbind(
+    find_intruders(tsdi_less_1, group_names),
+    find_intruders(group_names, tsdi_less_1)
+  )
+  
+  all_rogues <- unique(intruders_both)
+  intruders <- find_intruders(group_names, tsdi_less_1)
+  
+  # Return as a named list for this rank
+  list(
+    all_rogues = all_rogues,
+    intruders = intruders
+  )
+}
+
+all_rogues_combined <- bind_rows(lapply(intruder_results_list, `[[`, "all_rogues"))
+intruders_combined <- bind_rows(lapply(intruder_results_list, `[[`, "intruders"))
+
+
+####GET OUTLIERS
+
+tsdi_less_1 <- tSDI_results %>% filter(tSDI < 1) %>% pull(group)
+c_rogues <- cluster_df%>%filter(group%in%tsdi_less_1)
+
+outliers <- c_rogues %>%
+  group_by(rank, group) %>%
+  filter(
+    n() == 1 |                          # keep groups with only 1 cluster
+      n_tips != max(n_tips) |             # keep clusters that are not the largest
+      all(n_tips == max(n_tips))          # keep all if all clusters are the same size
+  ) %>%
+  ungroup()%>%
+  rename(outlier_group=group, outlier_tips=tips)
+
+outlier_tips_across_ranks <- outliers %>%
+  select(rank, outlier_tips, outlier_group) %>%
+  mutate(tip = strsplit(outlier_tips, ",")) %>%
+  unnest(tip) %>%
+  select(tip, rank, outlier_group) %>%
+  distinct() %>%
+  pivot_wider(names_from = rank, values_from = outlier_group) %>%
+  mutate(tip = factor(tip, levels = tree$tip.label)) %>%
+  arrange(tip)
+
+
+check_tips <- outlier_tips_across_ranks %>%
+  filter(!tip%in%outgroups)%>%
+  filter(rowSums(!is.na(across(any_of(ranks)))) > 1)
+
+print("Step 6: Intruder detection complete")
+
+
+################################################################################
 
 #####Outputs--------------------------------------------------------------------
 output_prefix <- ifelse(is.null(opt$pre), "", paste0(opt$pre, "_"))
@@ -534,13 +627,16 @@ output_prefix <- ifelse(is.null(opt$pre), "", paste0(opt$pre, "_"))
 write.csv(tRI_tCI_results, paste0(output_prefix, "tRI_tCI_per_group.csv"), row.names = FALSE)
 write.csv(rank_means, paste0(output_prefix, "tRI_tCI_ensemble.csv"), row.names = FALSE)
 write.csv(cluster_df, paste0(output_prefix, "clusters.csv"), row.names = FALSE)
-write.csv(intruder_results, paste0(output_prefix, "intruders.csv"), row.names = FALSE)
-write.csv(possible_misidentified_tips, paste0(output_prefix, "possible_misidentifications.csv"), row.names = FALSE)
 write.csv(tSDI_results, paste0(output_prefix, "tSDI_per_group.csv"), row.names = FALSE)
 write.csv(ensemble_tSDI, paste0(output_prefix, "tSDI_ensemble.csv"), row.names = FALSE)
 
+#################################################################################
+write.csv(intruders_combined, paste0(output_prefix, "intruders.csv"), row.names = FALSE)
+write.csv(check_tips, paste0(output_prefix, "check_tips.csv"), row.names = FALSE)
+#################################################################################
 
-print("Step 7: All results written to disk")
+
+print("All results written to disk")
 end_time <- Sys.time()
 elapsed_time <- end_time - start_time
 print(paste("Total time elapsed:", round(as.numeric(elapsed_time, units = "secs"), 2), "seconds"))
