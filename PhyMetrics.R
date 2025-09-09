@@ -609,10 +609,7 @@ outlier_tips_across_ranks <- outliers %>%
   distinct() %>%
   pivot_wider(names_from = rank, values_from = outlier_group) %>%
   mutate(tip = factor(tip, levels = tree$tip.label)) %>%
-  arrange(tip)
-
-
-check_tips <- outlier_tips_across_ranks %>%
+  arrange(tip) %>%
   filter(!tip%in%outgroups)%>%
   filter(rowSums(!is.na(across(any_of(ranks)))) > 1)
 
@@ -632,7 +629,7 @@ write.csv(ensemble_tSDI, paste0(output_prefix, "tSDI_ensemble.csv"), row.names =
 
 #################################################################################
 write.csv(intruders_combined, paste0(output_prefix, "intruders.csv"), row.names = FALSE)
-write.csv(check_tips, paste0(output_prefix, "check_tips.csv"), row.names = FALSE)
+write.csv(outlier_tips_across_ranks, paste0(output_prefix, "outliers.csv"), row.names = FALSE)
 #################################################################################
 
 
