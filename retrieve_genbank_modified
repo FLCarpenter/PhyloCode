@@ -1,0 +1,436 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+"""
+retrieve_genbank_modified.py
+
+Retrieve GenBank sequences and metadata from NCBI using search or accession list.
+Handles CON/WGS container records by resolving and fetching component contigs.
+Generates separate files for annotated and unannotated GenBank sequences.
+"""
+
+import os
+import re
+import sys
+import time
+import argparse
+import csv
+import textwrap as _textwrap
+from Bio import Entrez, SeqIO
+from xml.etree import ElementTree as ET
+
+class MultilineFormatter(argparse.HelpFormatter):
+    def _fill_text(self, text, width, indent):
+        text = self._whitespace_matcher.sub(' ', text).strip()
+        paragraphs = text.split('|n ')
+        multiline_text = ''
+        for paragraph in paragraphs:
+            formatted_paragraph = _textwrap.fill(paragraph, width,
+                                                 initial_indent=indent,
+                                                 subsequent_indent=indent) + '\n\n'
+            multiline_text += formatted_paragraph
+        return multiline_text
+
+def absent_authentication():
+    out = (
+        "# To automatically pull NCBI data from the internet, you need an NCBI account and API key.\n"
+        "# Go to https://ncbiinsights.ncbi.nlm.nih.gov/2017/11/02/new-api-keys-for-the-e-utilities/\n"
+        "# to find out more, register for an account and create an API key.\n"
+        "#\n"
+        "# Then create a text document with two lines, one for your registered email address,\n"
+        "# one for your api key, as follows:\n"
+        "my.email@address.com\n"
+        "my9989api807key87qrd67ui7d9eu6di98eu\n"
+        "#\n"
+        "# Supply this file to the --ncbiauth or -n argument\n"
+    )
+    with open("ncbi_authentication.txt", 'w') as o:
+        o.write(out)
+    os.chmod("ncbi_authentication.txt", 0o600)
+    sys.stderr.write("\n\nTo pull NCBI data from the internet, you need to provide authentication."
+                     "\nTo help, I have just made the file \"ncbi_authentication.txt\"\nPlease "
+                     "read this for more information.\n\n")
+    sys.exit()
+
+def get_authentication(path):
+    if not path:
+        absent_authentication()
+    auth = dict()
+    emailregex = r"^(\D)+(\w)*((\.(\w)+)?)+@(\D)+(\w)*((\.(\D)+(\w)*)+)?(\.)[a-z]{2,}$"
+    with open(path, 'r') as fh:
+        for line in fh:
+            line = line.strip()
+            if line.startswith('#') or line == '':
+                continue
+            if re.match(emailregex, line):
+                auth['email'] = line
+            elif re.match(r"^[a-z\d]{36}$", line):
+                auth['key'] = line
+            else:
+                sys.stderr.write(f"Error: don't recognise {line} in {path}\n")
+                sys.exit(1)
+    if len(auth) != 2:
+        sys.stderr.write(f"Error: could not find email and api key in {path}\n")
+        sys.exit(1)
+    return auth
+
+def parse_searchstring(fh):
+    lines = fh.readlines()
+    fh.close()
+    if len(lines) == 0:
+        sys.exit("Error: search string file is empty\n")
+    elif len(lines) > 1:
+        sys.stderr.write("Warning: search string file has more than one line; only first used\n")
+    return lines[0].strip()
+
+def parse_accessions(fh):
+    lines = fh.readlines()
+    fh.close()
+    accessions = []
+    for line in lines:
+        line = line.strip()
+        if line == '' or line.startswith('#'):
+            continue
+        accession = re.split(r'[\s,]', line)[0]
+        if accession:
+            accessions.append(accession)
+    if len(accessions) == 0:
+        sys.exit("Error: no valid accession IDs found in accession file\n")
+    return accessions
+
+def search(searchfh, auth):
+    searchstring = parse_searchstring(searchfh)
+    Entrez.email = auth['email']
+    Entrez.api_key = auth['key']
+    Entrez.tool = "retrieve_genbank_modified.py:search"
+
+    sys.stderr.write(f"Searching NCBI nt using search term:\n{searchstring}\n")
+    searchresult = Entrez.read(Entrez.esearch(db='nuccore', term=searchstring, retmax=999999999))
+    gbaccessions = searchresult['IdList']
+
+    fetchresult = Entrez.efetch(db='nuccore', id=','.join(gbaccessions), rettype='acc', retmode='text')
+    gbids = [i.strip() for i in fetchresult.readlines()]
+    fetchresult.close()
+
+    sys.stderr.write(f"Found {len(gbids)} records\n")
+    return gbids
+
+def parse_exclusion(paths):
+    lines = []
+    for p in paths:
+        lines.extend(p.readlines())
+        p.close()
+    excl = [re.sub(r'[^A-Za-z0-9\._\|].*$', '', e.strip()) for e in lines]
+    excl = [e for e in excl if e != 'NA']
+    exclout = []
+    for e in excl:
+        exclout.extend(e.split('|'))
+
+    return exclout
+
+def exclude(ids, paths):
+    exclusion = parse_exclusion(paths)
+    sys.stderr.write(f"Read {len(exclusion)} IDs to exclude\n")
+    outids = [g for g in ids if not any(e in g for e in exclusion)]
+    sys.stderr.write(f"After excluding supplied IDs, {len(outids)} records remain\n")
+    return outids
+
+def retrieve_ncbi_remote(idset, fetchfunc, idkey, chunksize, auth):
+    Entrez.email = auth['email']
+    Entrez.api_key = auth['key']
+    Entrez.tool = "retrieve_genbank_modified.py"
+
+    for start in range(0, len(idset), chunksize):
+        chunk = idset[start:start+chunksize]
+        sys.stderr.write(f"Retrieving chunk {start+1}-{start+len(chunk)} / {len(idset)}\n")
+        fetched = fetchfunc(chunk)
+        yield {i[idkey]: i for i in fetched}
+        time.sleep(1)
+
+def resolve_con_records(seqrecords, auth, chunksize):
+    """
+    Detect CON/WGS records without sequence data, parse their /CONTIG lines,
+    and fetch the underlying contig accessions as proper GenBank entries.
+    """
+    resolved = []
+    con_to_fetch = []
+
+    for sr in seqrecords:
+        div = sr.annotations.get("data_file_division", "")
+        if div == "CON" or len(sr.seq) == 0:
+            contig_text = sr.annotations.get("contig", "")
+            contigs = re.findall(r'([A-Z]{4,}\d+\.\d+)', contig_text)
+            if contigs:
+                sys.stderr.write(f"Resolving CON record {sr.name} -> {len(contigs)} contigs\n")
+                con_to_fetch.extend(contigs)
+            else:
+                sys.stderr.write(f"Skipping CON record {sr.name} (no contigs listed)\n")
+        else:
+            resolved.append(sr)
+
+    # Fetch the contig records
+    if con_to_fetch:
+        unique_contigs = list(set(con_to_fetch))
+        sys.stderr.write(f"Fetching {len(unique_contigs)} component contig sequences\n")
+
+        contig_records = retrieve_sequences(unique_contigs, auth, chunksize)
+        resolved.extend(contig_records)
+
+    return resolved
+
+
+def retrieve_sequences(ids, auth, chunksize):
+    """
+    Retrieve GenBank records, automatically resolving CON/WGS placeholders.
+    """
+    def efetch_sequences(idset):
+        sh = Entrez.efetch(db='nucleotide', id=','.join(idset), rettype='gb', retmode='text')
+        gb = SeqIO.parse(sh, 'genbank')
+        return ({'id': i, 'sr': g} for i, g in zip(idset, gb))
+
+    sys.stderr.write(f"Retrieving {len(ids)} full records from NCBI nt\n")
+    ncbigen = retrieve_ncbi_remote(ids, efetch_sequences, 'id', chunksize, auth)
+
+    out = []
+    for outsub in ncbigen:
+        for vals in outsub.values():
+            out.append(vals['sr'])
+
+    # Handle CON/WGS placeholder records automatically
+    out = resolve_con_records(out, auth, chunksize)
+
+    sys.stderr.write(f"Retrieved {len(out)} usable sequence records after resolving CON entries\n")
+    return out
+
+def rename(seqrecords, rename):
+    basename = rename
+    startval = 1
+    valwidth = len(str(len(seqrecords)))
+    extractint = re.search(r'[0-9]*$', rename)
+    if extractint:
+        basename = re.sub(r'[0-9]*$', '', rename)
+        startval_str = extractint.group(0)
+        if startval_str != '':
+            extwidth = len(startval_str)
+            if valwidth > extwidth or len(str(int(startval_str) + len(seqrecords))) > extwidth:
+                sys.exit("Error: supplied starting name to -r/--rename does not contain enough digits "
+                         "to generate sufficient new names")
+            valwidth = extwidth
+            startval = int(startval_str)
+
+    names = [f"{basename}{str(r).zfill(valwidth)}" for r in range(startval, startval + len(seqrecords))]
+
+    renamemap = {}
+    for sr, n in zip(seqrecords, names):
+        renamemap[n] = sr.name
+        sr.name = n
+
+    return seqrecords, renamemap
+
+def get_lineage_table(tax_ids, auth, pause=0.34):
+    """
+    Given a list of NCBI taxonomy IDs, return a dict mapping each tax_id
+    to a dictionary of ranks (e.g. order, family, genus, species, etc.).
+    """
+    Entrez.email = auth['email']
+    Entrez.api_key = auth['key']
+    Entrez.tool = "retrieve_genbank_modified.py:get_lineage_table"
+
+    lineage_data = {}
+
+    for i, tid in enumerate(tax_ids, 1):
+        lineage_data[tid] = {}
+        try:
+            handle = Entrez.efetch(db="taxonomy", id=tid, retmode="xml")
+            record = ET.parse(handle).getroot()
+            handle.close()
+
+            # There may be multiple Taxon entries (LineageEx and current)
+            taxon = record.find("Taxon")
+            if taxon is None:
+                continue
+
+            # Root name and rank
+            sci_name = taxon.findtext("ScientificName", default="NA")
+            rank = taxon.findtext("Rank", default="NA")
+            lineage_data[tid]["current_name"] = sci_name
+            lineage_data[tid]["current_rank"] = rank
+
+            # Build lineage dictionary
+            lineage_ex = taxon.find("LineageEx")
+            if lineage_ex is not None:
+                for node in lineage_ex.findall("Taxon"):
+                    r = node.findtext("Rank")
+                    n = node.findtext("ScientificName")
+                    if r and n:
+                        lineage_data[tid][r] = n
+
+            # Include root if species and not already included
+            if rank == "species" and "species" not in lineage_data[tid]:
+                lineage_data[tid]["species"] = sci_name
+
+            time.sleep(pause)
+        except Exception as e:
+            lineage_data[tid]["error"] = str(e)
+            lineage_data[tid]["species"] = "NA"
+    return lineage_data
+
+def parse_output_metadata(seqrecords, renamemap, path, chunksize, auth):
+    """
+    Extract metadata from GenBank records and write to a CSV file, including taxonomy lineage
+    and raw /geo_loc_name from GenBank.
+    """
+    # Base columns
+    head1 = ["db_id", "institution_code"]
+    head2 = [
+        "ncbi_species", "ncbi_taxid", "locality", "subregion",
+        "country", "geo_loc_name_raw", "authors", "genbank_accession", "contigname"
+    ]
+
+    sys.stderr.write(f"Parsing metadata from {len(seqrecords)} retrieved records\n")
+    metadata = {}
+    taxon_ids = []
+
+    # 1. Loop over sequences to collect metadata and taxon IDs
+    for sr in seqrecords:
+        fmtaut = lambda s: s.replace(', ', ' and ').replace(',', ' ')
+        srdata = {
+            "db_id": sr.name,
+            "genbank_accession": renamemap.get(sr.name, "NA"),
+            "authors": fmtaut(sr.annotations["references"][0].authors)
+                        if sr.annotations.get("references") else "NA",
+            "ncbi_species": sr.annotations.get("organism", "NA")
+        }
+
+        # Extract 'source' feature
+        srcfeat = next((f for f in sr.features if f.type == "source"), None)
+        if srcfeat:
+            # Taxon ID
+            if "db_xref" in srcfeat.qualifiers:
+                taxon = [v for v in srcfeat.qualifiers["db_xref"] if v.startswith("taxon:")]
+                if taxon:
+                    taxid = taxon[0].replace("taxon:", "")
+                    srdata["ncbi_taxid"] = taxid
+                    taxon_ids.append(taxid)
+
+            # Specimen voucher / institution code
+            if "specimen_voucher" in srcfeat.qualifiers:
+                srdata["institution_code"] = srcfeat.qualifiers["specimen_voucher"][0]
+
+            # Geography: country and raw geo_loc_name
+            if "country" in srcfeat.qualifiers:
+                srdata["country"] = srcfeat.qualifiers["country"][0]
+            if "geo_loc_name" in srcfeat.qualifiers:
+                srdata["geo_loc_name_raw"] = srcfeat.qualifiers["geo_loc_name"][0]
+
+        metadata[sr.name] = srdata
+
+    # 2. Fetch lineage info for unique taxon IDs in batches
+    unique_taxids = list(set(taxon_ids))
+    lineage_dict = {}
+    if unique_taxids:
+        sys.stderr.write(f"Fetching taxonomy lineages for {len(unique_taxids)} unique taxon IDs\n")
+        batch_size = 50  # adjust if needed
+        for start in range(0, len(unique_taxids), batch_size):
+            batch = unique_taxids[start:start + batch_size]
+            sys.stderr.write(f"\rFetching taxon IDs {start + 1} to {start + len(batch)} / {len(unique_taxids)}")
+            sys.stderr.flush()
+            batch_lineage = get_lineage_table(batch, auth)
+            lineage_dict.update(batch_lineage)
+            time.sleep(0.5)
+        sys.stderr.write("\n")
+
+    # 3. Determine all ranks for lineage columns
+    all_ranks = set()
+    for line in lineage_dict.values():
+        all_ranks.update(line.keys())
+    all_ranks = sorted(all_ranks)
+
+    # 4. Write CSV file
+    header = head1 + head2 + all_ranks
+    sys.stderr.write(f"Writing metadata CSV to {path}\n")
+
+    with open(path, "w", newline="", encoding="utf-8") as o:
+        writer = csv.DictWriter(o, fieldnames=header)
+        writer.writeheader()
+        for name, md in metadata.items():
+            tid = md.get("ncbi_taxid", "")
+            lineage = lineage_dict.get(tid, {}) if tid else {}
+            row = {**md, **lineage}
+            writer.writerow({h: row.get(h, "NA") for h in header})
+
+def split_annotated_unannotated(seqrecords, output_annotated, output_unannotated):
+    # Define what counts as a real annotation
+    GENE_FEATURES = {"CDS", "gene", "tRNA", "rRNA"}
+
+    annotated = []
+    unannotated = []
+    for sr in seqrecords:
+        if any(f.type in GENE_FEATURES for f in sr.features):
+            annotated.append(sr)
+        else:
+            unannotated.append(sr)
+
+    sys.stderr.write(f"Writing {len(annotated)} annotated sequences to {output_annotated}\n")
+    with open(output_annotated, 'w') as o:
+        SeqIO.write(annotated, o, 'genbank')
+
+    sys.stderr.write(f"Writing {len(unannotated)} unannotated sequences to {output_unannotated}\n")
+    with open(output_unannotated, 'w') as o:
+        SeqIO.write(unannotated, o, 'genbank')
+
+def main():
+    parser = argparse.ArgumentParser(
+        formatter_class=MultilineFormatter,
+        description="Retrieve GenBank records from NCBI.\n"
+                    "Supply either --search with a file containing a search term or\n"
+                    "--accessions with a file listing accession IDs.\n"
+                    "Optionally exclude certain IDs and rename sequences.\n"
+                    "Generates separate files for annotated and unannotated records."
+    )
+    parser.add_argument('-n', '--ncbiauth', type=str, required=True,
+                        help="Text file with NCBI email and API key on separate lines.")
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument('-s', '--search', type=argparse.FileType('r'),
+                       help="File with one NCBI nucleotide search term (used to retrieve IDs).")
+    group.add_argument('-i', '--accessions', type=argparse.FileType('r'),
+                       help="File listing accession numbers (one per line). Skips search step.")
+    parser.add_argument('-e', '--exclude', type=argparse.FileType('r'), nargs='*',
+                        help="Files with accession IDs to exclude.")
+    parser.add_argument('-a', '--output_annotated', type=str, default='annotated.gb',
+                        help="Output GenBank file for annotated sequences (default: annotated.gb).")
+    parser.add_argument('-u', '--output_unannotated', type=str, default='unannotated.gb',
+                        help="Output GenBank file for unannotated sequences (default: unannotated.gb).")
+    parser.add_argument('-m', '--metadata', type=str,
+                        help="Write tab-separated metadata to this file.")
+    parser.add_argument('-r', '--rename', type=str,
+                        help="Rename sequences with this prefix + zero-padded number.")
+    parser.add_argument('-c', '--chunksize', type=int, default=250,
+                        help="Number of records per NCBI request (default 250).")
+
+    args = parser.parse_args()
+
+    auth = get_authentication(args.ncbiauth)
+
+    if args.search:
+        ids = search(args.search, auth)
+    else:
+        ids = parse_accessions(args.accessions)
+
+    if args.exclude:
+        ids = exclude(ids, args.exclude)
+
+    seqs = retrieve_sequences(ids, auth, args.chunksize)
+
+    if args.rename:
+        seqs, renamemap = rename(seqs, args.rename)
+    else:
+        renamemap = {sr.name: sr.name for sr in seqs}
+
+    split_annotated_unannotated(seqs, args.output_annotated, args.output_unannotated)
+
+    if args.metadata:
+        parse_output_metadata(seqs, renamemap, args.metadata, args.chunksize, auth)
+
+if __name__ == '__main__':
+    main()
