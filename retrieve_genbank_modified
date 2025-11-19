@@ -283,8 +283,8 @@ def parse_output_metadata(seqrecords, renamemap, path, chunksize, auth):
     # Base columns
     head1 = ["db_id", "institution_code"]
     head2 = [
-        "ncbi_species", "ncbi_taxid", "locality", "subregion",
-        "country", "geo_loc_name_raw", "authors", "genbank_accession", "contigname"
+        "ncbi_species", "ncbi_taxid", "submission_date", "locality", "subregion",
+        "country", "geo_loc_name_raw", "authors", "genbank_accession", "alternative_accession", "contigname"
     ]
 
     sys.stderr.write(f"Parsing metadata from {len(seqrecords)} retrieved records\n")
@@ -294,13 +294,20 @@ def parse_output_metadata(seqrecords, renamemap, path, chunksize, auth):
     # 1. Loop over sequences to collect metadata and taxon IDs
     for sr in seqrecords:
         fmtaut = lambda s: s.replace(', ', ' and ').replace(',', ' ')
+	# Extract accessions from GenBank record
+        all_accessions = sr.annotations.get("accessions", ["NA"])
+        alternative_accession = all_accessions[0] if all_accessions else "NA"
         srdata = {
             "db_id": sr.name,
             "genbank_accession": renamemap.get(sr.name, "NA"),
+            "submission_date": sr.annotations.get("date", "NA"),
             "authors": fmtaut(sr.annotations["references"][0].authors)
                         if sr.annotations.get("references") else "NA",
-            "ncbi_species": sr.annotations.get("organism", "NA")
-        }
+            "ncbi_species": sr.annotations.get("organism", "NA"),
+            "alternative_accession": alternative_accession
+	}
+        if srdata["alternative_accession"] == srdata["genbank_accession"]:
+            srdata["alternative_accession"] = "NA"
 
         # Extract 'source' feature
         srcfeat = next((f for f in sr.features if f.type == "source"), None)
@@ -405,7 +412,7 @@ def main():
                         help="Write tab-separated metadata to this file.")
     parser.add_argument('-r', '--rename', type=str,
                         help="Rename sequences with this prefix + zero-padded number.")
-    parser.add_argument('-c', '--chunksize', type=int, default=250,
+    parser.add_argument('-c', '--chunksize', type=int, default=100,
                         help="Number of records per NCBI request (default 250).")
 
     args = parser.parse_args()
