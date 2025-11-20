@@ -10,8 +10,24 @@ import textwrap as _textwrap
 import urllib
 import os
 import sys
+import datetime
 from collections import defaultdict
 from Bio import SeqIO
+
+# -----------------------------------------------------------------------------
+# Logging
+# -----------------------------------------------------------------------------
+def init_logger(output_dir):
+    logpath = os.path.join(output_dir, "run.log")
+    fh = open(logpath, "w")
+
+    def log(msg):
+        timestamp = datetime.datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
+        line = f"{timestamp} {msg}\n"
+        fh.write(line)
+        fh.flush()
+        sys.stderr.write(line)
+    return log
 
 # -----------------------------------------------------------------------------
 # Custom help formatter
@@ -46,16 +62,19 @@ gene_aliases = {
              "ATP SYNTHASE SUBUNIT 8","ATP SYNTHASE FO SUBUNIT 8","ATPASE8","ATPASE SUBUNIT 8"],
     "COX1": ["COX1","CYTOCHROME C OXIDASE SUBUNIT 1","CYTOCHROME OXIDASE SUBUNIT I",
              "CYTOCHROME C OXIDASE SUBUNIT I","COXI","CO1","COI","CYTOCHROME COXIDASE SUBUNIT I",
-             "CYTOCHROME OXIDASE SUBUNIT 1","CYTOCHROME OXYDASE SUBUNIT 1"],
+             "CYTOCHROME OXIDASE SUBUNIT 1","CYTOCHROME OXYDASE SUBUNIT 1","CYTOCHROME OXIDASE I",
+             "MT-CO1","CYTOCHOME OXIDASE SUBUNIT I","COX-1","C01","COX I","CYTOCHROME OXIDASE C SUBUNIT I",
+             "CYTOCHROME OXIDASE 1","CYTCHROME OXIDASE SUBUNIT I","CYTOMCHROME C OXIDASE SUBUNIT 1","CO I","COX 1"],
     "COX2": ["COX2","CYTOCHROME C OXIDASE SUBUNIT 2","CYTOCHROME OXIDASE SUBUNIT II",
              "CYTOCHROME C OXIDASE SUBUNIT II","COXII","CO2","COII","CYTOCHROME COXIDASE SUBUNIT II",
-             "CYTOCHROME OXIDASE SUBUNIT 2","CYTOCHROME OXYDASE SUBUNIT 2"],
+             "CYTOCHROME OXIDASE SUBUNIT 2","CYTOCHROME OXYDASE SUBUNIT 2","CYTOCHROME C OXIDASE II",
+             "CYTOCHROME OXIDASE (CO) II","CO II","COX II","COX II"],
     "COX3": ["COX3","CYTOCHROME C OXIDASE SUBUNIT 3","CYTOCHROME OXIDASE SUBUNIT III",
              "CYTOCHROME C OXIDASE SUBUNIT III","COXIII","CO3","COIII","CYTOCHROME COXIDASE SUBUNIT III",
-             "CYTOCHROME OXIDASE SUBUNIT 3","CYTOCHROME OXYDASE SUBUNIT 3"],
-    "CYTB": ["CYTB","CYTOCHROME B","CYB","COB","COB / CYTB"],
+             "CYTOCHROME OXIDASE SUBUNIT 3","CYTOCHROME OXYDASE SUBUNIT 3","CYTOCHROME OXIDASE III", "CO III"],
+    "CYTB": ["CYTB","CYTOCHROME B","CYB","COB","COB / CYTB","CYTOCHROME B (COB) GENE","CYT B","COB/CYTB","CB"],
     "ND1":  ["ND1","NAD1","NSD1","NADH1","NADH DEHYDROGENASE SUBUNIT I",
-             "NADH DEHYDROGENASE SUBUNIT 1","NADH DESHYDROGENASE SUBUNIT 1","NAD1-0"],
+             "NADH DEHYDROGENASE SUBUNIT 1","NADH DESHYDROGENASE SUBUNIT 1","NAD1-0","NDI","NADHI"],
     "ND2":  ["ND2","NAD2","NSD2","NADH2","NADH DEHYDROGENASE SUBUNIT II",
              "NADH DEHYDROGENASE SUBUNIT 2","NADH DESHYDROGENASE SUBUNIT 2","NAD2-0"],
     "ND3":  ["ND3","NAD3","NSD3","NADH3","NADH DEHYDROGENASE SUBUNIT III",
@@ -65,7 +84,7 @@ gene_aliases = {
     "ND4L": ["ND4L","NAD4L","NSD4L","NADH4L","NADH DEHYDROGENASE SUBUNIT IVL",
              "NADH DEHYDROGENASE SUBUNIT 4L","NADH DESHYDROGENASE SUBUNIT 4L","NAD4L-0"],
     "ND5":  ["ND5","NAD5","NSD5","NADH5","NADH DEHYDROGENASE SUBUNIT V",
-             "NADH DEHYDROGENASE SUBUNIT 5","NADH DESHYDROGENASE SUBUNIT 5","NAD5-0"],
+             "NADH DEHYDROGENASE SUBUNIT 5","NADH DESHYDROGENASE SUBUNIT 5","NAD5-0","NADH DEHYDROGENASE SUBUNIT 5 (ND5)"],
     "ND6":  ["ND6","NAD6","NSD6","NADH6","NADH DEHYDROGENASE SUBUNIT VI",
              "NADH DEHYDROGENASE SUBUNIT 6","NADH DESHYDROGENASE SUBUNIT 6","NAD6-0"],
     "LSU": ["28S","28S RRNA","28S RIBOSOMAL RNA","28S-RRNA","28S RNA","LSU",
@@ -93,65 +112,60 @@ gene_aliases = {
 # Function: loadnamevariants
 # -----------------------------------------------------------------------------
 def loadnamevariants(report=False):
-    """Load or define gene name variants, distinguishing CDS vs rRNA vs tRNA."""
-    output = {}
-    fullparse = {}
-    alltypes = set()
+    """
+    Build gene name variants exclusively from the gene_aliases dictionary.
+    Assigns each gene a type: CDS, rRNA, or tRNA.
+    """
 
-    url = "https://raw.githubusercontent.com/tjcreedy/constants/master/gene_name_variants.txt"
-    success = False
+    output = {}      # variant → canonical name
+    fullparse = {}   # canonical name → {type, variants}
+    alltypes = set() # set of all annotation types used
 
-    try:
-        for line in urllib.request.urlopen(url):
-            line = line.decode('utf-8').strip()
-            description, variants = line.split(":")
-            name, annotype, fullname = description.split(";")
-            variants = variants.split(',')
-            variants.extend([name, fullname.upper()])
-            fullvariants = []
-            for v in variants:
-                for g in ['', ' ']:
-                    v = v.replace(g, '')
-                    for s in ['', ' GENE', ' ' + annotype.upper()]:
-                        var = v + s
-                        fullvariants.append(var)
-                        output[v + s] = name
-            alltypes.add(annotype)
-            fullparse[name] = {'type': annotype, 'variants': fullvariants}
-            if report:
-                fullvariants = [v.replace(' ', '\u00A0') if len(v) < 12 else v for v in fullvariants]
-                fullvariants = _textwrap.fill(', '.join(fullvariants), width=80,
-                                              initial_indent='\t', subsequent_indent='\t')
-                print(f"Standard name = {name}, type = {annotype}, full name = {fullname}:\n{fullvariants}")
-        success = True
-    except Exception as e:
-        sys.stderr.write(f"Warning: could not load gene_name_variants.txt from GitHub ({e}). Using local aliases.\n")
+    # Explicit classification rules
+    rRNA_KEYS = {"12S", "16S", "LSU", "SSU"}
+    tRNA_KEYS = {"TRNA"}
 
-    if not success:
-        # fallback from the embedded dictionary
-        for name, variants in gene_aliases.items():
-            if "rRNA" in name.upper():
-                annotype = "rRNA"
-            elif "TRNA" in name.upper():
-                annotype = "tRNA"
-            else:
-                annotype = "CDS"
-            alltypes.add(annotype)
+    for name, variants in gene_aliases.items():
+        key = name.upper()
 
-            fullvariants = []
-            for v in variants:
-                v = v.upper()
-                for s in ['', ' ' + annotype.upper(), ' GENE']:
-                    fullvariants.append(v + s)
-                    output[v + s] = name
-            fullparse[name] = {'type': annotype, 'variants': fullvariants}
-            if report:
-                fullvariants = _textwrap.fill(', '.join(fullvariants), width=80,
-                                              initial_indent='\t', subsequent_indent='\t')
-                print(f"Standard name = {name}, type = {annotype}:\n{fullvariants}")
+        # Determine type
+        if key in rRNA_KEYS:
+            annotype = "rRNA"
+        elif key in tRNA_KEYS:
+            annotype = "tRNA"
+        else:
+            annotype = "CDS"
 
-    if not report:
-        return output, alltypes, fullparse
+        alltypes.add(annotype)
+
+        # Build variant list
+        fullvariants = []
+        for v in variants:
+            v = v.upper()
+
+            # Same structure as original code: raw, +GENE, +TYPE
+            for suffix in ['', ' GENE', f' {annotype.upper()}']:
+                variant = v + suffix
+                fullvariants.append(variant)
+                output[variant] = name
+
+        # Store full parse metadata
+        fullparse[name] = {
+            'type': annotype,
+            'variants': fullvariants
+        }
+
+        # Optional printed report
+        if report:
+            formatted = _textwrap.fill(
+                ', '.join(fullvariants),
+                width=80,
+                initial_indent='\t',
+                subsequent_indent='\t'
+            )
+            print(f"Standard name = {name}, type = {annotype}:\n{formatted}")
+
+    return output, alltypes, fullparse
 
 # -----------------------------------------------------------------------------
 # Function: get_feat_name
@@ -212,7 +226,7 @@ def getcliargs(arglist=None, knowngenes=None, knowntypes=None):
     return args
 
 # -----------------------------------------------------------------------------
-# Main script
+# Main
 # -----------------------------------------------------------------------------
 if __name__ == "__main__":
     nameconvert, annotypes, namevariants = loadnamevariants()
@@ -225,7 +239,14 @@ if __name__ == "__main__":
     if not os.path.exists(args.output):
         os.makedirs(args.output)
 
+    # Init log
+    log = init_logger(args.output)
+    log("=== Extraction run started ===")
+    log(f"Input files: {args.genbank}")
+    log(f"Gene types requested: {args.genetypes}")
+
     unrecgenes = defaultdict(list)
+    warnings = []  # Collect warnings for end summary
 
     if args.presence:
         args.presence = open(args.presence, 'w')
@@ -239,7 +260,15 @@ if __name__ == "__main__":
     outfh = {}
 
     for gbpath in args.genbank:
+        total_records = sum(1 for _ in SeqIO.parse(gbpath, "genbank"))
+        processed = 0
+        log(f"Processing file: {gbpath} ({total_records} records)")
         for seqrecord in SeqIO.parse(gbpath, "genbank"):
+            processed += 1
+            if processed % 1000 == 0 or processed == total_records:
+                pct = (processed / total_records) * 100
+                log(f"Progress: {processed}/{total_records} records ({pct:.1f}%)")
+
             if args.filter and seqrecord.name not in filterlist:
                 nrejected += 1
                 continue
@@ -266,15 +295,16 @@ if __name__ == "__main__":
                 featsequence = feat.extract(seqrecord.seq)
                 if args.keepframe and 'codon_start' in feat.qualifiers:
                     featsequence = featsequence[(int(feat.qualifiers['codon_start'][0]) - 1):]
+
                 foundgenes[stdname].append(featsequence)
 
             if len(foundgenes) >= args.mingenes:
                 if not args.reqgenes or all(g in foundgenes for g in args.reqgenes):
                     for gene, seqs in foundgenes.items():
                         if len(seqs) > 1:
-                            sys.stderr.write(
-                                f"Warning: {seqname} has multiple annotations of {gene}\n"
-                            )
+                            msg = f"{seqname} has multiple annotations of {gene}"
+                            warnings.append(msg)
+                            log(f"  Warning: {msg}")
                         if gene not in outfh:
                             outfh[gene] = open(os.path.join(args.output, f"{gene}.fasta"), 'w')
                         for seq in seqs:
@@ -282,19 +312,35 @@ if __name__ == "__main__":
                     if args.presence:
                         args.presence.write(f"{outname},{','.join(foundgenes.keys())}\n")
                 else:
-                    sys.stderr.write(f"Warning: {seqname} missing required genes, skipped\n")
+                    warnings.append(f"{seqname} missing required genes, skipped")
             else:
-                sys.stderr.write(f"Warning: {seqname} has too few annotated genes, skipped\n")
+                warnings.append(f"{seqname} has too few annotated genes, skipped")
 
     for fh in outfh.values():
         fh.close()
     if args.presence:
         args.presence.close()
 
+    # ------------------------
+    # Print Warnings Summary
+    # ------------------------
+    print("\n" + "="*40)
+    print("Warnings Summary")
+    print("="*40 + "\n")
+
     if unrecgenes:
-        sys.stderr.write("Warning: unrecognised genes present in these entries:\n")
+        print("Unrecognized genes present:")
         for gene, entries in unrecgenes.items():
-            sys.stderr.write(f"\t{gene} - {', '.join(sorted(set(entries)))}\n")
+            print(f"  {gene} - {', '.join(sorted(set(entries)))}")
 
     if nrejected > 0:
-        sys.stderr.write(f"Warning: {nrejected} entries rejected by filter list\n")
+        print(f"{nrejected} entries rejected by filter list")
+
+    if warnings:
+        print("\nOther warnings during processing:")
+        for w in warnings:
+            print(f"  {w}")
+    else:
+        print("No warnings.")
+
+    log("=== Extraction run finished ===")
