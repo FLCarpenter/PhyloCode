@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-"""Extracts CDS, rRNA, and tRNA sequences from GenBank-format files,
-grouping them by standardized gene names."""
+"""
+Extract CDS, rRNA, and tRNA sequences from GenBank files,
+grouping them by standardized gene names.
+Outputs are split into subfolders: CDS/, rRNA/, tRNA/
+"""
 
-# Imports
 import argparse
 import textwrap as _textwrap
-import urllib
 import os
 import sys
 import datetime
@@ -20,7 +21,6 @@ from Bio import SeqIO
 def init_logger(output_dir):
     logpath = os.path.join(output_dir, "run.log")
     fh = open(logpath, "w")
-
     def log(msg):
         timestamp = datetime.datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
         line = f"{timestamp} {msg}\n"
@@ -48,12 +48,7 @@ class MultilineFormatter(argparse.HelpFormatter):
         return multiline_text
 
 # -----------------------------------------------------------------------------
-# Global variables
-# -----------------------------------------------------------------------------
-version = '1.1-integrated'
-
-# -----------------------------------------------------------------------------
-# Gene variant definitions (local fallback)
+# Gene alias definitions
 # -----------------------------------------------------------------------------
 gene_aliases = {
     "ATP6": ["ATP6","ATP SYNTHASE F0 SUBUNIT 6","APT6","ATP SYNTHASE A0 SUBUNIT 6",
@@ -64,7 +59,7 @@ gene_aliases = {
              "CYTOCHROME C OXIDASE SUBUNIT I","COXI","CO1","COI","CYTOCHROME COXIDASE SUBUNIT I",
              "CYTOCHROME OXIDASE SUBUNIT 1","CYTOCHROME OXYDASE SUBUNIT 1","CYTOCHROME OXIDASE I",
              "MT-CO1","CYTOCHOME OXIDASE SUBUNIT I","COX-1","C01","COX I","CYTOCHROME OXIDASE C SUBUNIT I",
-             "CYTOCHROME OXIDASE 1","CYTCHROME OXIDASE SUBUNIT I","CYTOMCHROME C OXIDASE SUBUNIT 1","CO I","COX 1"],
+             "CYTOCHROME OXIDASE 1","CYTCHROME OXIDASE SUBUNIT I","CYTOMCHROME C OXIDASE SUBUNIT 1","CO I","COX 1", "COl"],
     "COX2": ["COX2","CYTOCHROME C OXIDASE SUBUNIT 2","CYTOCHROME OXIDASE SUBUNIT II",
              "CYTOCHROME C OXIDASE SUBUNIT II","COXII","CO2","COII","CYTOCHROME COXIDASE SUBUNIT II",
              "CYTOCHROME OXIDASE SUBUNIT 2","CYTOCHROME OXYDASE SUBUNIT 2","CYTOCHROME C OXIDASE II",
@@ -84,7 +79,7 @@ gene_aliases = {
     "ND4L": ["ND4L","NAD4L","NSD4L","NADH4L","NADH DEHYDROGENASE SUBUNIT IVL",
              "NADH DEHYDROGENASE SUBUNIT 4L","NADH DESHYDROGENASE SUBUNIT 4L","NAD4L-0"],
     "ND5":  ["ND5","NAD5","NSD5","NADH5","NADH DEHYDROGENASE SUBUNIT V",
-             "NADH DEHYDROGENASE SUBUNIT 5","NADH DESHYDROGENASE SUBUNIT 5","NAD5-0","NADH DEHYDROGENASE SUBUNIT 5 (ND5)"],
+             "NADH DEHYDROGENASE SUBUNIT 5","NADH DESHYDROGENASE SUBUNIT 5","NAD5-0","NADH DEHYDROGENASE SUBUNIT 5 (ND5)", "MTND5"],
     "ND6":  ["ND6","NAD6","NSD6","NADH6","NADH DEHYDROGENASE SUBUNIT VI",
              "NADH DEHYDROGENASE SUBUNIT 6","NADH DESHYDROGENASE SUBUNIT 6","NAD6-0"],
     "LSU": ["28S","28S RRNA","28S RIBOSOMAL RNA","28S-RRNA","28S RNA","LSU",
@@ -109,26 +104,18 @@ gene_aliases = {
 }
 
 # -----------------------------------------------------------------------------
-# Function: loadnamevariants
+# Load gene variants
 # -----------------------------------------------------------------------------
 def loadnamevariants(report=False):
-    """
-    Build gene name variants exclusively from the gene_aliases dictionary.
-    Assigns each gene a type: CDS, rRNA, or tRNA.
-    """
-
     output = {}      # variant → canonical name
     fullparse = {}   # canonical name → {type, variants}
     alltypes = set() # set of all annotation types used
 
-    # Explicit classification rules
     rRNA_KEYS = {"12S", "16S", "LSU", "SSU"}
     tRNA_KEYS = {"TRNA"}
 
     for name, variants in gene_aliases.items():
         key = name.upper()
-
-        # Determine type
         if key in rRNA_KEYS:
             annotype = "rRNA"
         elif key in tRNA_KEYS:
@@ -137,93 +124,60 @@ def loadnamevariants(report=False):
             annotype = "CDS"
 
         alltypes.add(annotype)
-
-        # Build variant list
         fullvariants = []
         for v in variants:
             v = v.upper()
-
-            # Same structure as original code: raw, +GENE, +TYPE
             for suffix in ['', ' GENE', f' {annotype.upper()}']:
                 variant = v + suffix
                 fullvariants.append(variant)
                 output[variant] = name
+        fullparse[name] = {'type': annotype, 'variants': fullvariants}
 
-        # Store full parse metadata
-        fullparse[name] = {
-            'type': annotype,
-            'variants': fullvariants
-        }
-
-        # Optional printed report
         if report:
-            formatted = _textwrap.fill(
-                ', '.join(fullvariants),
-                width=80,
-                initial_indent='\t',
-                subsequent_indent='\t'
-            )
+            formatted = _textwrap.fill(', '.join(fullvariants), width=80,
+                                       initial_indent='\t', subsequent_indent='\t')
             print(f"Standard name = {name}, type = {annotype}:\n{formatted}")
 
     return output, alltypes, fullparse
 
 # -----------------------------------------------------------------------------
-# Function: get_feat_name
+# Extract feature name
 # -----------------------------------------------------------------------------
 def get_feat_name(feat):
     featname = "unknown"
     nametags = ['gene', 'product', 'label', 'standard_name']
     for t in nametags:
         if t in feat.qualifiers:
-            featname = feat.qualifiers[t][0].upper()
+            featname = feat.qualifiers[t][0].strip().upper()
             break
     return featname
 
 # -----------------------------------------------------------------------------
-# Function: getcliargs
+# CLI arguments
 # -----------------------------------------------------------------------------
 def getcliargs(arglist=None, knowngenes=None, knowntypes=None):
     parser = argparse.ArgumentParser(
-        description="""
-    This script finds and extracts sequences corresponding to CDS, rRNA and/or tRNA annotations 
-    from a set of sequences from one or more genbank-format flat files. Specify which regions to 
-    extract using the -r/--regiontypes argument (default is CDS)
-    |n
-    The region name is identified based on the /gene, /label or /product tag in the genbank-format 
-    flat file. Two methods are used to ensure that naming variants are correctly identified as the 
-    same gene:
-        1. the gene name is converted to uppercase (so that "atp8" is the same as "ATP8")
-        2. the script removes semicolons, underscores, hyphens or spaces, and any characters 
-           following these, from gene names ("ATP8-0" -> "ATP8")
-    |n
-    Optionally, you can print the known gene name variants with -s/--showgenes.
-    """,
+        description="Extract CDS, rRNA, tRNA from GenBank files",
         formatter_class=MultilineFormatter)
 
     parser.add_argument("-g", "--genbank", type=str, metavar='PATH', required=True, nargs='+')
     parser.add_argument("-o", "--output", type=str, metavar='PATH', required=True)
-    parser.add_argument("-m", "--mingenes", type=int, metavar='N', default=0)
-    parser.add_argument("-q", "--reqgenes", type=str, metavar='GENE', nargs='*',
-                        choices=knowngenes)
-    parser.add_argument("-r", "--genetypes", type=str, metavar='TYPE', nargs='+',
-                        choices=knowntypes, default=list(knowntypes))
-    parser.add_argument("-f", "--filter", type=str, metavar='PATH')
+    parser.add_argument("-m", "--mingenes", type=int, default=0)
+    parser.add_argument("-q", "--reqgenes", type=str, nargs='*', choices=knowngenes)
+    parser.add_argument("-f", "--filter", type=str)
     parser.add_argument("-n", "--organism", action='store_true')
     parser.add_argument("-w", "--writeunknowns", action='store_true')
     parser.add_argument("-k", "--keepframe", action='store_true')
-    parser.add_argument("-p", "--presence", type=str, metavar='PATH')
     parser.add_argument("-s", "--showgenes", action='store_true')
     parser.add_argument("-v", "--version", action='store_true')
 
     args = parser.parse_args(arglist) if arglist else parser.parse_args()
-
-    if args.version:
-        print(version)
-        sys.exit(0)
-    if args.mingenes < 0:
-        parser.error(f"{args.mingenes} is not a valid minimum gene count")
-
     return args
+
+# -----------------------------------------------------------------------------
+# Priority dictionary
+# -----------------------------------------------------------------------------
+PRIORITY = {"CDS": 3, "rRNA": 3, "tRNA": 3, "gene": 2, "misc_feature": 1, "unknown": 0}
 
 # -----------------------------------------------------------------------------
 # Main
@@ -236,33 +190,32 @@ if __name__ == "__main__":
         loadnamevariants(report=True)
         sys.exit(0)
 
+    # Create output folder and subfolders
     if not os.path.exists(args.output):
         os.makedirs(args.output)
+    subfolders = {t: os.path.join(args.output, t) for t in ["CDS","rRNA","tRNA"]}
+    for f in subfolders.values():
+        os.makedirs(f, exist_ok=True)
 
-    # Init log
     log = init_logger(args.output)
     log("=== Extraction run started ===")
     log(f"Input files: {args.genbank}")
-    log(f"Gene types requested: {args.genetypes}")
 
     unrecgenes = defaultdict(list)
-    warnings = []  # Collect warnings for end summary
-
-    if args.presence:
-        args.presence = open(args.presence, 'w')
+    warnings = []
+    nrejected = 0
+    outfh = {t:{} for t in ["CDS","rRNA","tRNA"]}
 
     filterlist = []
     if args.filter:
         with open(args.filter) as fh:
             filterlist = [line.strip() for line in fh]
 
-    nrejected = 0
-    outfh = {}
-
     for gbpath in args.genbank:
         total_records = sum(1 for _ in SeqIO.parse(gbpath, "genbank"))
         processed = 0
         log(f"Processing file: {gbpath} ({total_records} records)")
+
         for seqrecord in SeqIO.parse(gbpath, "genbank"):
             processed += 1
             if processed % 1000 == 0 or processed == total_records:
@@ -276,54 +229,77 @@ if __name__ == "__main__":
             seqname = seqrecord.name
             outname = seqrecord.organism.replace(' ', '_') if args.organism and hasattr(seqrecord, "organism") else seqname
 
-            foundgenes = defaultdict(list)
+            foundgenes = {}       # gene -> sequence
+            foundgenes_type = {}  # gene -> canonical type
 
             for feat in seqrecord.features:
-                if feat.type not in args.genetypes:
-                    continue
-
+                feat_type = feat.type
                 name = get_feat_name(feat)
-                if name in nameconvert:
-                    stdname = nameconvert[name]
-                else:
+
+                if name not in nameconvert:
                     unrecgenes[name].append(seqname)
-                    if args.writeunknowns:
-                        stdname = name
-                    else:
+                    if not args.writeunknowns:
                         continue
+                    stdname = name
+                    anotype = "unknown"
+                else:
+                    stdname = nameconvert[name]
+                    anotype = namevariants[stdname]['type']
 
-                featsequence = feat.extract(seqrecord.seq)
-                if args.keepframe and 'codon_start' in feat.qualifiers:
-                    featsequence = featsequence[(int(feat.qualifiers['codon_start'][0]) - 1):]
+                # Extract feature sequence
+                featseq = feat.extract(seqrecord.seq)
 
-                foundgenes[stdname].append(featsequence)
+                # Apply codon_start frame only for CDS
+                frame_applied = False
+                if anotype == "CDS" and args.keepframe and 'codon_start' in feat.qualifiers:
+                    codon_start = int(feat.qualifiers['codon_start'][0])
+                    featseq = featseq[(codon_start - 1):]
+                    frame_applied = True
 
+                # ---- Priority-based storage (applied to all types) ----
+                existing_type = foundgenes_type.get(stdname)
+                existing_seq = foundgenes.get(stdname)
+
+                # Adjust priority if frame was applied to CDS
+                current_priority = PRIORITY.get(anotype, 0)
+                if frame_applied:
+                    current_priority += 1  # ensure frame-adjusted CDS always replaces unadjusted
+
+                existing_priority = PRIORITY.get(existing_type, 0) if existing_type else -1
+
+                # Store sequence if higher priority or first time
+                if existing_type is None or current_priority > existing_priority:
+                    foundgenes[stdname] = str(featseq)
+                    foundgenes_type[stdname] = anotype
+                elif current_priority == existing_priority:
+                    # Warn only if sequences differ
+                    if str(featseq) != existing_seq:
+                        msg = f"{seqname} has multiple distinct {anotype} annotations of {stdname}"
+                        warnings.append(msg)
+                        log(f"  Warning: {msg}")
+
+
+
+            # Write output
             if len(foundgenes) >= args.mingenes:
                 if not args.reqgenes or all(g in foundgenes for g in args.reqgenes):
-                    for gene, seqs in foundgenes.items():
-                        if len(seqs) > 1:
-                            msg = f"{seqname} has multiple annotations of {gene}"
-                            warnings.append(msg)
-                            log(f"  Warning: {msg}")
-                        if gene not in outfh:
-                            outfh[gene] = open(os.path.join(args.output, f"{gene}.fasta"), 'w')
-                        for seq in seqs:
-                            outfh[gene].write(f">{outname}\n{seq}\n")
-                    if args.presence:
-                        args.presence.write(f"{outname},{','.join(foundgenes.keys())}\n")
+                    for gene, seq in foundgenes.items():
+                        typ = foundgenes_type[gene]
+                        if typ not in ["CDS","rRNA","tRNA"]:
+                            typ = "CDS"  # fallback
+                        if gene not in outfh[typ]:
+                            outfh[typ][gene] = open(os.path.join(subfolders[typ], f"{gene}.fasta"), 'w')
+                        outfh[typ][gene].write(f">{outname}\n{seq}\n")
                 else:
                     warnings.append(f"{seqname} missing required genes, skipped")
             else:
                 warnings.append(f"{seqname} has too few annotated genes, skipped")
 
-    for fh in outfh.values():
-        fh.close()
-    if args.presence:
-        args.presence.close()
+    # Close all files
+    for subdict in outfh.values():
+        for fh in subdict.values():
+            fh.close()
 
-    # ------------------------
-    # Print Warnings Summary
-    # ------------------------
     print("\n" + "="*40)
     print("Warnings Summary")
     print("="*40 + "\n")
