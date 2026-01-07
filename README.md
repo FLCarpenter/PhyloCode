@@ -25,6 +25,9 @@ Alignment-wide gap percentage:    -a -g
 ###### Usage
 
 
+**gene_trimmer.R** Trims aligned mitochondrial genes to retain the well-aligned core regions.
+###### Usage
+
 
 **PhyMetrics.R** analyses phylogenetic trees with associated metadata and computes metrics like the taxonomic retention index (tRI), taxonomic consistency index (tCI), identifies clusters, detects intruder tips, and calculates the taxonomic Simpson diversity index (tSDI).
 ###### Usage
