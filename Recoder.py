@@ -21,6 +21,11 @@ def Is_Valid_Sequence(sequence):
         return False
 
 
+def gapify_sequence(sequence):
+    """Replace '?' with '-' only"""
+    return sequence.replace('?', '-')
+
+
 def RY_Recoding_N(Sequence):
     recoded_seq = ""
     for base in Sequence:
@@ -121,7 +126,7 @@ def Binary_Recoding_Codon_NT3R(Sequence, Position):
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Recodes nucleotide sequences into RY or Binary formats."
+        description="Recode nucleotide sequences (RY, Binary, or Gap)"
     )
 
     parser.add_argument(
@@ -147,8 +152,8 @@ def parse_args():
     parser.add_argument(
         "-o", "--output",
         required=True,
-        choices=["RY", "Binary"],
-        help="Output format: RY or Binary"
+        choices=["RY", "Binary", "Gap"],
+        help="Output format: RY, Binary, or Gap"
     )
 
     return parser.parse_args()
@@ -165,16 +170,18 @@ if __name__ == "__main__":
     OutData = args.output
 
     with open(File, 'r') as F:
+
         if OutData == 'RY':
-            if Codon == 'N':
-                OutFName = f'{File.split(".")[0]}_RY.{File.split(".")[1]}'
-            else:
-                OutFName = f'{File.split(".")[0]}_Position{Codon}_RY.{File.split(".")[1]}'
+            suffix = "RY"
         elif OutData == 'Binary':
-            if Codon == 'N':
-                OutFName = f'{File.split(".")[0]}_Binary.{File.split(".")[1]}'
-            else:
-                OutFName = f'{File.split(".")[0]}_Position{Codon}_Binary.{File.split(".")[1]}'
+            suffix = "Binary"
+        elif OutData == 'Gap':
+            suffix = "Gap"
+
+        if Codon == 'N':
+            OutFName = f'{File.split(".")[0]}_{suffix}.{File.split(".")[1]}'
+        else:
+            OutFName = f'{File.split(".")[0]}_Position{Codon}_{suffix}.{File.split(".")[1]}'
 
         Out = open(OutFName, 'w')
 
@@ -187,7 +194,10 @@ if __name__ == "__main__":
                 Line = Line.upper()
 
                 if Is_Valid_Sequence(Line):
-                    if OutData == 'RY':
+                    if OutData == 'Gap':
+                        Out.write(gapify_sequence(Line) + '\n')
+                        
+                    elif OutData == 'RY':
                         if Option == 'nt':
                             if Codon == 'N':
                                 Out.write(RY_Recoding_N(Line) + '\n')
