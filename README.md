@@ -60,16 +60,18 @@ Optional arguments:
 
 
 
-**RY_Recoder_Binary.py** Recodes nucleotide sequences from an input .fasta file replacing purines ("A", "a", "G", "g") with "0" or "R" and pyrimidines ("T", "t", "C", "c") with "1" or "Y". RY recoding aims to mitigate against the effect of base composition biases/heterogeneity in phylogenetic inference. 
+**Recoder.py** Recodes nucleotide sequences from an input .fasta file into RY, Binary, or Gap formats. 
++ RY recoding replaces purines (A, a, G, g) with R and pyrimidines (T, t, C, c) with Y.
++ Binary recoding replaces purines with 0 and pyrimidines with 1.
++ Gap recoding replaces unknown/missing characters (?) with gaps (-) without further transformation.
 ###### Usage
-    python RY_Recoder_Binary.py input.fasta input_datatype position output_datatype
+    python RY_Recoder_Binary.py -i input.fasta -d <datatype> -p <position> -o <output>
 ###### 
-    python RY_Recoder_Binary.py input.fasta nt N Binary
-    python RY_Recoder_Binary.py input.fasta nt3r 1 RY
-
+    python RY_Recoder_Binary.py -i input.fasta -d nt -p N -o Binary
+    python RY_Recoder_Binary.py -i input.fasta -d nt3r -p 1 -o RY
+    python RY_Recoder_Binary.py -i input.fasta -d nt -p N -o Gap
 Note:
 datatype: nt (nucleotide) or nt3r (nucleotide with 3rd codon position removed)
-
 position: codons 1/2/3 or N (all)
 
 
@@ -115,6 +117,21 @@ path/to/gene_file.fasta = start-end
 Example:
 
 data/12S.fasta = 1-1699
+
+
+## Depreciated
+
+**RY_Recoder_Binary.py** Recodes nucleotide sequences from an input .fasta file replacing purines ("A", "a", "G", "g") with "0" or "R" and pyrimidines ("T", "t", "C", "c") with "1" or "Y". RY recoding aims to mitigate against the effect of base composition biases/heterogeneity in phylogenetic inference. 
+###### Usage
+    python RY_Recoder_Binary.py input.fasta input_datatype position output_datatype
+###### 
+    python RY_Recoder_Binary.py input.fasta nt N Binary
+    python RY_Recoder_Binary.py input.fasta nt3r 1 RY
+
+Note:
+datatype: nt (nucleotide) or nt3r (nucleotide with 3rd codon position removed)
+
+position: codons 1/2/3 or N (all)
 
 data/16S.fasta = 1700-3200
 
