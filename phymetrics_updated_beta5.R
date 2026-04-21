@@ -80,7 +80,8 @@ tree <- root(tree, outgroup = root_tips, resolve.root = TRUE)
 
 metadata <- read.csv(metadata_file, stringsAsFactors = FALSE)
 colnames(metadata)[1] <- "mt_id"  # Force first column to be 'mt_id'
-metadata <- metadata %>% filter(mt_id %in% tree$tip.label)
+tip_labels <- tree$tip.label
+metadata <- metadata %>% filter(mt_id %in% tip_labels)
 metadata[metadata == ""] <- NA
 metadata[] <- lapply(metadata, trimws)
 
